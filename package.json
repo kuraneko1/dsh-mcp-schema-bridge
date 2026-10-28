@@ -1,0 +1,9 @@
+{
+  "name": "dsh-mcp-schema-bridge",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "A stdio MCP schema compatibility bridge for DeepSeek Harness",
+  "scripts": {"test": "node --test"},
+  "engines": {"node": ">=20"}
+}
