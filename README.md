@@ -1,26 +1,32 @@
 # DSH MCP Schema Bridge
 
-A small, dependency-free **stdio** relay for connecting MCP servers to DeepSeek Harness when their input schemas contain certain constructs that the Harness tool registry does not accept. It works with the existing `@deepseek-ai/dsh-mcp-client`; it is not a replacement client or a Blender add-on.
+[English](README.en.md)
 
-[日本語](#日本語) · [Limitations](#limitations)
+DeepSeek Harnessの標準MCPクライアントとローカルのMCPサーバーの間に入る、依存パッケージ不要の軽量な**stdio中継**です。Harnessが受け付けない一部の入力スキーマを変換します。既存の `@deepseek-ai/dsh-mcp-client` と組み合わせて使います。
 
-## How it works
+Blender専用のアドオンやMCPクライアントの代替ではありません。Blender以外のstdio型MCPサーバーにも使えますが、**すべてのサーバーに対応するわけではありません**。
 
-The relay starts one MCP server command, forwards newline-delimited JSON-RPC messages, and adapts only input schemas in `tools/list` responses:
+## 動作の仕組み
 
-- `anyOf` becomes `oneOf` **only when every branch has a distinct, non-overlapping JSON type**.
-- Simple `type` arrays become `oneOf` under the same restriction.
-- Unsafe unions remain unchanged and produce a warning on stderr. No constraint is silently removed.
+中継がMCPサーバーを起動し、改行区切りのJSON-RPCメッセージを転送します。変換対象は `tools/list` の応答に含まれる入力スキーマのみです。
 
-Other messages, tool arguments, results, server instructions, and output schemas are forwarded without intentional changes. The server remains responsible for validating requests. This is a compatibility workaround, not a complete JSON Schema converter.
+- `anyOf` は、各候補のJSON型が異なり、互いに重ならない場合に限って `oneOf` に変換します。
+- 単純な `type` の配列も、同じ条件のもとで `oneOf` に変換します。
+- 安全に変換できない形式は変更せず、標準エラー出力に警告を出します。制約を黙って削除することはありません。
 
-## Requirements
+その他のメッセージ、ツールの引数や結果、サーバーからの指示、出力スキーマは、意図的に変更せず転送します。リクエストの検証は引き続きMCPサーバー側が行います。これは互換性のための対処であり、JSON Schema全体を変換するものではありません。
 
-Node.js 20 or later, an installed DeepSeek Harness profile containing `@deepseek-ai/dsh-mcp-client`, and a local stdio MCP server. No npm install is required for this relay.
+## 必要なもの
 
-## Configure
+- Node.js 20以降
+- `@deepseek-ai/dsh-mcp-client` が利用できるDeepSeek Harnessのプロファイル
+- ローカルで起動できるstdio型MCPサーバー
 
-Put `bridge.mjs` at a stable path, then add a patch to the **appropriate** Harness profile's `cordis.patch.yml`. Replace all placeholder paths with paths on your machine:
+この中継を使うための `npm install` は不要です。
+
+## 設定方法
+
+`bridge.mjs` を移動しない場所に置き、利用するHarnessプロファイルの `cordis.patch.yml` に次の設定を追加します。パスはすべて自分の環境に合わせて置き換えてください。
 
 ```yaml
 - insert:
@@ -38,38 +44,32 @@ Put `bridge.mjs` at a stable path, then add a patch to the **appropriate** Harne
         toolCallTimeoutMs: 180000
 ```
 
-The `--` separator keeps the wrapped server command and arguments separate. For other stdio MCP servers replace `uvx mcp-for-blender` with their executable and arguments. Configure environment variables on the Harness client entry as required by that server; avoid committing credentials.
+`--` 以降に、起動するサーバーのコマンドと引数を指定します。別のstdio型MCPサーバーを使う場合は、`uvx mcp-for-blender` の部分をそのサーバーの実行ファイルと引数に置き換えてください。環境変数が必要な場合はHarness側の設定に追加し、認証情報をGitにコミットしないようにしてください。
 
-For Blender, install and enable the [MCP for Blender add-on](https://github.com/ahujasid/mcp-for-blender) and start its server in Blender. Start or reload the Harness profile and ask it to call `mcp__blender__get_addon_status` and `mcp__blender__get_scene_info`. The Blender app must be running. Avoid running competing clients that make conflicting scene edits.
+Blenderで使う場合は、[MCP for Blenderのアドオン](https://github.com/ahujasid/mcp-for-blender)をインストール・有効化し、Blender内でサーバーを起動します。Harnessのプロファイルを起動または再読み込みした後、`mcp__blender__get_addon_status` と `mcp__blender__get_scene_info` を呼び出して接続を確認できます。Blender本体も起動したままにしてください。複数のクライアントが同じシーンを競合して編集しないようにしてください。
 
-## Limitations
+## 制限事項
 
-- **Not universal:** overlapping `anyOf` alternatives, numeric bounds, `allOf`, `$ref`, `format`, and other unsupported vocabulary are not rewritten. The Harness may still reject a server's tool list; inspect stderr.
-- Only stdio servers using newline-delimited JSON-RPC are supported. HTTP/SSE servers and other framing are not implemented.
-- Union rewriting is conservative: branches with `number` and `integer` overlap; nested constraints beside a type array are left unchanged.
-- The Harness may still reject unsupported output schemas or other tool metadata. This project does not change those.
-- The bridge runs the configured command with the user's permissions. Configure only servers you trust.
-- Blender MCP may offer paid third-party generators if configured; this relay does not change or activate them.
-- Tested with the current Blender MCP tool schemas and a mock stdio server. Other servers and Harness versions require their own testing.
+- **万能な変換ではありません。** 候補が重なり合う `anyOf`、数値の上下限、`allOf`、`$ref`、`format` などは変換しません。Harnessがツール一覧を拒否する場合は、標準エラー出力を確認してください。
+- 対応するのは改行区切りJSON-RPCを使うstdioサーバーです。HTTP/SSEや他の形式には対応していません。
+- `number` と `integer` のように値が重なり得る候補や、`type` の配列に制約が付いた形式は変更しません。
+- 対応していない出力スキーマやその他のツール情報が原因で、Harnessが拒否する場合があります。この中継はそれらを変更しません。
+- 設定したコマンドはユーザーの権限で実行されます。信頼できるサーバーのみを指定してください。
+- Blender MCPでは、設定によっては有料の外部3D生成機能が利用可能になります。この中継がそれらを変更・有効化することはありません。
+- 現在のBlender MCPのツールスキーマと、テスト用stdioサーバーで動作確認しています。他のサーバーやHarnessのバージョンでは個別の確認が必要です。
 
-## Test
+## テスト
 
 ```sh
 node --test test/bridge.test.mjs
 ```
 
-## 日本語
+## 関連プロジェクト
 
-DeepSeek Harnessの標準MCPクライアントとローカルのMCPサーバーの間に入る、軽量な互換中継です。Harness側で扱えない`anyOf`のうち、型が互いに重ならないものだけを等価な`oneOf`に変換します。安全に変換できないものは変更せず警告を出します。
+- [dsh-mcp-bridge](https://github.com/Chhlafiu4312/dsh-mcp-bridge)：MCPツールを登録する、より広範な代替クライアント・プラグイン。
+- [dsh-mcp-adapter](https://github.com/NexusAgentX/dsh-mcp-adapter)：単一のツールから必要なMCPツールを検索・呼び出す方式。
+- [公式MCPクライアント](https://github.com/deepseek-ai/deepseek-harness/tree/master/packages/mcp/mcp-client)：この中継と組み合わせて使うクライアント。
 
-Blender専用ではありませんが、**すべてのMCPサーバーに対応するわけではありません**。詳しい設定例は上の「Configure」を参照してください。Blenderを使う際は、Blender本体とMCPアドオンを起動しておく必要があります。
+## ライセンス
 
-## Existing projects
-
-- [dsh-mcp-bridge](https://github.com/Chhlafiu4312/dsh-mcp-bridge) is a broader alternative client/plugin which registers MCP tools.
-- [dsh-mcp-adapter](https://github.com/NexusAgentX/dsh-mcp-adapter) offers on-demand search and invocation through a single tool.
-- [Official MCP client](https://github.com/deepseek-ai/deepseek-harness/tree/master/packages/mcp/mcp-client) is the upstream client used by this relay.
-
-## License
-
-MIT; see [LICENSE](LICENSE).
+MITライセンスです。詳細は[LICENSE](LICENSE)をご覧ください。
